@@ -1,0 +1,20 @@
+{
+  "articles": [
+    {
+      "path": "about.html",
+      "title": "About R4DSA",
+      "description": "Some additional details about R4DSA",
+      "author": [],
+      "contents": "\r\n\r\n\r\n\r\n",
+      "last_modified": "2021-07-25T04:30:05+08:00"
+    },
+    {
+      "path": "index.html",
+      "title": "R4DSA",
+      "author": [],
+      "contents": "\r\n\r\n\r\n\r\n",
+      "last_modified": "2021-07-25T04:30:06+08:00"
+    }
+  ],
+  "collections": ["posts/posts.json"]
+}

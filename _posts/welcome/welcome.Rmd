@@ -1,0 +1,602 @@
+---
+title: "DataViz Assignment"
+description: |
+  VAST Mini Challenge 3
+author:
+  - name: Joyce WOON Shi Hui
+    url: https://www.linkedin.com/in/joycewoonsh/
+date: 07-25-2021
+output:
+  distill::distill_article:
+    self_contained: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1 Case Introduction
+
+Vast Challenge: Mini-Challenge 3 poses a social media and text analysis challenge.
+
+We are to perform a retrospective analysis based on limited information about what took place in order to identify risks and how they could have been mitigated more effectively.
+
+
+### 1.1 Data Source
+
+The single data stream available comes from two major sources:
+
+1. Microblog records that have been identified by automated filters as being potentially relevant to the ongoing incident
+
+2. Text transcripts of emergency dispatches by the Abila, Kronos local police and fire departments.
+
+### 1.2 Tasks and Questions
+
+1. Using visual analytics, characterize the different types of content in the dataset. What distinguishes meaningful event reports from typical chatter from junk or spam?
+
+2. Use visual analytics to represent and evaluate how the level of the risk to the public evolves over the course of the evening. Consider the potential consequences of the situation and the number of people who could be affected.
+
+3. If you were able to send a team of first responders to any single place, where would it be? Provide your rationale. How might your response be different if you had to respond to the events in real time rather than retrospectively?
+
+
+# 2 Code
+
+### 2.1 Install and Load R Packages
+
+This is so that the code can run.
+
+```{r, results='hide', message=FALSE}
+packages = c('tm', 'SnowballC', 'wordcloud', 'RColorBrewer', 'dplyr',
+             'Rcpp', 'lubridate', 'stringr', 'tidytext', 'igraph',
+             'ggraph', 'ggplot2', 'rtweet', 'raster', 'sf',
+             'tmap', 'tidyr', 'tidyverse','tibble')
+
+for (p in packages){
+  if(!require(p, character.only = T)){
+    install.packages(p)
+  }
+  library(p, character.only = T)
+}
+```
+
+### 2.2 Setting up Code
+
+**2.2.1 Set seed for reproducibility** 
+
+```{r, results='hide', message=FALSE}
+set.seed(1234) 
+```
+
+---
+
+**2.2.2 Import csv files**
+
+```{r, results='hide', message=FALSE}
+df1 <- read_csv("csv-1700-1830.csv")
+df2 <- read_csv("csv-1831-2000.csv")
+df3 <- read_csv("csv-2001-2131.csv")
+
+colnames(df1)[2] <- c("dt")
+colnames(df2)[2] <- c("dt")
+colnames(df3)[2] <- c("dt")
+```
+
+---
+
+**2.2.3 Change message to lowercase**
+```{r}
+df1$message <- tolower(df1$message)
+df2$message <- tolower(df2$message)
+df3$message <- tolower(df3$message)
+```
+
+---
+
+**2.2.3 Change datetime**
+
+```{r, results='hide', message=FALSE}
+df1$dt = df1$dt - 20140123000000
+df2$dt = df2$dt - 20140123000000
+df3$dt = df3$dt - 20140123000000
+
+df1$dt <- format(strptime(df1$dt, format="%H%M%S"), format = "%H:%M:%S")
+df2$dt <- format(strptime(df2$dt, format="%H%M%S"), format = "%H:%M:%S")
+df3$dt <- format(strptime(df3$dt, format="%H%M%S"), format = "%H:%M:%S")
+```
+
+---
+
+**2.2.4 Find out range of dates per dataframe**
+
+df1 is from 17:00:00 to 18:34:00
+
+```{r}
+min(df1$dt,na.rm = TRUE)
+max(df1$dt,na.rm = TRUE)
+```
+
+---
+
+df2 is from 18:31:00 to 20:04:00
+
+```{r}
+min(df2$dt,na.rm = TRUE)
+max(df2$dt,na.rm = TRUE)
+```
+
+---
+
+df3 is from 20:01:00 to 21:34:45
+
+```{r}
+min(df3$dt,na.rm = TRUE)
+max(df3$dt,na.rm = TRUE)
+```
+
+It looks like there is some overlap in time in df1, df2, df3. 
+
+---
+
+**2.2.5 Create new dataframes**
+
+- df1 17:00 to <18:30
+- df2 18:30 to <20:00
+- df3 >=20:00
+- df4 17:00:00 to 21:34:45
+
+```{r}
+# Bind df1, df2 and df3 together to create df4
+df4 <- rbind(df1, df2, df3)
+
+# df1: Extract 17:00 to <18:30
+df1 <- df4[df4$dt < "18:30:00",]
+df1$period <- "17:00 to <18:30"
+
+# df2: Extract 18:30 to <20:00
+df2 <- df4[df4$dt >= "18:30:00" & df4$dt < "20:00:00",]
+df2$period <- "18:30 to <20:00"
+
+# df3: Extract >=20:00
+df3 <- df4[df4$dt >= "20:00:00",]
+df3$period <- ">=20:00"
+```
+
+---
+
+**2.2.6 Find out range of dates per new dataframe**
+
+new df1 is from 17:00:00 to 18:29:44
+
+```{r}
+min(df1$dt,na.rm = TRUE)
+max(df1$dt,na.rm = TRUE)
+```
+
+---
+
+new df2 is from 18:30:00 to 19:59:52
+
+```{r}
+min(df2$dt,na.rm = TRUE)
+max(df2$dt,na.rm = TRUE)
+```
+
+---
+
+new df3 is from 20:00:13 to 21:34:45
+
+```{r}
+min(df3$dt,na.rm = TRUE)
+max(df3$dt,na.rm = TRUE)
+```
+
+---
+
+new df4 is from 17:00:00 to 21:34:45
+
+```{r}
+min(df4$dt,na.rm = TRUE)
+max(df4$dt,na.rm = TRUE)
+```
+
+There are no overlaps now!
+
+---
+
+**2.2.7 Investigating if there is any spam**
+
+We use wordclouds to see the most frequent words.
+
+---
+
+Wordcloud for df1
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df1$message
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc1 <- data.frame(word = names(words),freq=words)
+
+
+wordcloud(words = wc1$word, freq = wc1$freq, min.freq = 1,
+          max.words=175, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Wordcloud for df2
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df2$message
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc2 <- data.frame(word = names(words),freq=words)
+
+
+wordcloud(words = wc2$word, freq = wc2$freq, min.freq = 1,
+          max.words=175, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Wordcloud for df3
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df3$message
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc3 <- data.frame(word = names(words),freq=words)
+
+
+wordcloud(words = wc3$word, freq = wc3$freq, min.freq = 1,
+          max.words=175, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Wordcloud for df4
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df4$message
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc4 <- data.frame(word = names(words),freq=words)
+
+
+wordcloud(words = wc4$word, freq = wc4$freq, min.freq = 1,
+          max.words=175, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Barplot for df4 
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+barplot(wc4[1:10,]$freq, las = 2, names.arg = wc4[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+```
+
+```{r}
+wc4[1:10,]
+```
+
+As we can see, pokrally and kronosstar seems to have the most frequency and that they are hashtags. To investigate.
+
+---
+
+Investigate pokrally.
+
+```{r}
+# Filtering out pokrally hashtag (ht1_)
+ht1_df4 <- df4 %>%
+  filter(str_detect(message, '#pokrally'))
+```
+
+```{r}
+ht1_df4
+```
+
+We note that for the pokrally hashtag, there is a user "KronosQuoth" whose content seems to be spam.
+
+---
+
+Remove KronosQuoth.
+
+```{r}
+# Remove KronosQuoth
+df1 <- df1 %>%
+  filter(!str_detect(author, 'KronosQuoth'))
+df2 <- df2 %>%
+  filter(!str_detect(author, 'KronosQuoth'))
+df3 <- df3%>%
+  filter(!str_detect(author, 'KronosQuoth'))
+df4 <- df4%>%
+  filter(!str_detect(author, 'KronosQuoth'))
+```
+
+```{r}
+# Check pokrally hashtag after removing KronosQuoth
+ht1_df4 <- df4 %>%
+  filter(str_detect(message, '#pokrally'))
+ht1_df4
+```
+
+There is less spam now. However, to note there are RTs, which should be removed. 
+
+---
+
+Remove RTs.
+
+```{r}
+df1 <- df1 %>%
+  filter(!str_detect(message, 'rt @'))
+df2 <- df2 %>%
+  filter(!str_detect(message, 'rt @'))
+df3 <- df3%>%
+  filter(!str_detect(message, 'rt @'))
+df4 <- df4%>%
+  filter(!str_detect(message, 'rt @'))
+```
+
+```{r}
+# Check pokrally hashtag after removing RTs
+ht1_df4 <- df4 %>%
+  filter(str_detect(message, '#pokrally'))
+ht1_df4
+```
+
+There is less spam now.
+
+---
+
+Investigate kronosstar.
+
+```{r}
+# Filtering out kronosstar hashtag (ht2_)
+ht2_df4 <- df4 %>%
+  filter(str_detect(message, '#kronosstar'))
+ht2_df4
+```
+
+It seems that kronosstar is not spam.
+
+### 2.3 Create Word Clouds
+
+To note that abila, pok and abilapost are also high frequency words that do not add to the analysis. Thus, they will be removed.
+
+---
+
+Wordcloud for df1
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df1$message
+text <- str_replace_all(text,"@[a-z,A-Z]*","") # Remove @
+text <- str_replace_all(text,"abila","") # Remove abila
+text <- str_replace_all(text,"pok","") # Remove pok
+text <- str_replace_all(text,"abilapost","") # Remove abilapost
+text <- str_replace_all(text,"kronosstar","") # Remove kronosstar
+
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+
+
+
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc1 <- data.frame(word = names(words),freq=words)
+
+wordcloud(words = wc1$word, freq = wc1$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Barplot for df1
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+barplot(wc1[1:10,]$freq, las = 2, names.arg = wc1[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+```
+
+```{r}
+wc1[1:10,]
+```
+
+---
+
+Wordcloud for df2 
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df2$message
+text <- str_replace_all(text,"@[a-z,A-Z]*","") # Remove @
+text <- str_replace_all(text,"abila","") # Remove abila
+text <- str_replace_all(text,"pok","") # Remove pok
+text <- str_replace_all(text,"abilapost","") # Remove abilapost
+text <- str_replace_all(text,"kronosstar","") # Remove kronosstar
+
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+inspect(docs)
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc2 <- data.frame(word = names(words),freq=words)
+
+wordcloud(words = wc2$word, freq = wc2$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Barplot for df2
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+barplot(wc2[1:10,]$freq, las = 2, names.arg = wc2[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+```
+
+```{r}
+wc2[1:10,]
+```
+
+---
+
+Wordcloud for df3
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+text <- df3$message
+text <- str_replace_all(text,"@[a-z,A-Z]*","") # Remove @
+text <- str_replace_all(text,"abila","") # Remove abila
+text <- str_replace_all(text,"pok","") # Remove pok
+text <- str_replace_all(text,"abilapost","") # Remove abilapost
+text <- str_replace_all(text,"kronosstar","") # Remove kronosstar
+
+docs <- Corpus(VectorSource(text))
+docs <- docs %>%
+  tm_map(removeNumbers) %>%
+  tm_map(removePunctuation) %>%
+  tm_map(stripWhitespace)
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeWords, stopwords("english"))
+inspect(docs)
+dtm <- TermDocumentMatrix(docs) 
+matrix <- as.matrix(dtm) 
+words <- sort(rowSums(matrix),decreasing=TRUE) 
+wc3 <- data.frame(word = names(words),freq=words)
+
+wordcloud(words = wc3$word, freq = wc3$freq, min.freq = 1,
+          max.words=200, random.order=FALSE, rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+```
+
+---
+
+Barplot for df3
+
+```{r, results='hide', message=FALSE, warning=FALSE}
+barplot(wc3[1:10,]$freq, las = 2, names.arg = wc3[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+```
+
+```{r}
+wc3[1:10,]
+```
+
+# 3 Observations
+
+The questions posed in *Section 1* will be answered with observations from *Section 2*.
+
+---
+
+**1. Using visual analytics, characterize the different types of content in the dataset. What distinguishes meaningful event reports from typical chatter from junk or spam?**
+
+According to *2.2.7*, there seems to be normal messages, RTs and spam by authors such as KronosQuoth. RTs and spam are not meaningful reports due to RTs being the repeating of messages and spam not adding to the analysis. It is very common for social media such as Twitter to have bots that post quotes queued in historically. KronosQuoth looks to be one such bot and thus was removed.
+
+Other words that were removed due to high frequency and being not useful to the analysis would be:
+
+- abila
+- pok
+- abilapost
+- kronosstar
+
+Abila and Abilapost are a place and an author respectively. POK and Kronosstar are just hashtags.
+
+---
+
+**2. Use visual analytics to represent and evaluate how the level of the risk to the public evolves over the course of the evening. Consider the potential consequences of the situation and the number of people who could be affected.** 
+
+Observations from the above 3 wordclouds:
+
+- df1 (17:00 to <18:30)
+
+There was a rally going on, police were involved but nothing relatively dangerous was happening. 
+
+"Rally" was the highest frequency word at 140. The rest of the highest frequency words are 49 and below. As such, the most notable thing that happened in df1 was a rally.
+
+- df2 (18:30 to <20:00)
+
+Fire seems to be highest frequency. Other risky words start appearing such as shooting, evacuation. Places to take note of would be Dancing Dolphin Apartment Complex and Gelato Galore. 
+
+"Fire" is the highest frequency word at 113. Notable words in top 10 words include "police", "dancing" and "dolphin".
+
+- df3 (20:00 to <21:35)
+
+There are many more risk words here other than "fire" such as "terrorists", "hostage", etc. However, it looks like there have been response to assist the situation with "standoff", "firefighter", "swat", etc. "Dancing" and "Dolphin" seems to be appearing again, which might mean that the danger is occuring there.  
+
+"Tag" is the highest frequency word at 63. Notable words in top 10 words include "fire" at 40, "apd", "police". It seems like a response happened in df3 and fire was handled.
+
+Overall observation for Qn 2:
+
+Level of risk to public according to the observations above are df2 > df3 > df1 in the sense that df1 did not have the risk occuring, df2 had the risk occuring and df3 with the risk occuring but at least it was handled by relevant forces like the police, firemen, etc. df2 was the time period where people were most in trouble.
+
+We can also see this from the number of times the word fire was used between df2 and df3 with 309 vs 103 respectively. It seems like the number of people in danger decreased between df2 and df3.
+
+---
+
+**3. If you were able to send a team of first responders to any single place, where would it be? Provide your rationale. How might your response be different if you had to respond to the events in real time rather than retrospectively?** 
+
+According to the word clouds, Dancing Dolphin seems to be mentioned the most in df2. I would send first responders to that place first during df2.
+
+If I had to respond to events in real time, I would choose the following:
+
+- df1: Park
+- df2: Dancing Dolphin
+- df3: Dancing Dolphin
+
+But realistically, no one will be sent during df1 because nothing has occured and the police are somewhat covering the rally. However, if something did happen during that timeframe, I would send first responders there.
+
+
+
